@@ -164,17 +164,19 @@ def oauth_request_token(request):
 
     return response
 
-def oauth_auth_view(request, token, callback, params):
-    form = forms.OAuthAuthenticationForm(initial={
+def oauth_auth_view(request, token, callback, params, template_name, authorization_form):
+    form = authorization_form(initial={
         'oauth_token': token.key,
         'oauth_callback': token.get_callback_url() or callback,
       })
 
-    return render_to_response('piston/authorize_token.html',
-            { 'form': form }, RequestContext(request))
+    return render_to_response(template_name,
+            { 'form': form, 'token': token }, RequestContext(request))
 
 @login_required
-def oauth_user_auth(request):
+def oauth_user_auth(request, 
+        template_name='piston/authorize_token.html',
+        authorization_form=forms.OAuthAuthenticationForm):
     oauth_server, oauth_request = initialize_server_request(request)
     
     if oauth_request is None:
@@ -195,7 +197,8 @@ def oauth_user_auth(request):
 
         oauth_view = getattr(settings, 'OAUTH_AUTH_VIEW', None)
         if oauth_view is None:
-            return oauth_auth_view(request, token, callback, params)
+            return oauth_auth_view(request, token, callback, params, 
+                    template_name, authorization_form)
         else:
             return get_callable(oauth_view)(request, token, callback, params)
     elif request.method == "POST":
@@ -239,9 +242,10 @@ class OAuthAuthentication(object):
     """
     OAuth authentication. Based on work by Leah Culver.
     """
-    def __init__(self, realm='API'):
+    def __init__(self, realm='API', template_name='oauth/challenge.html'):
         self.realm = realm
         self.builder = oauth.build_authenticate_header
+        self.template_name = template_name
     
     def is_authenticated(self, request):
         """
@@ -284,7 +288,7 @@ class OAuthAuthentication(object):
         for k, v in self.builder(realm=realm).iteritems():
             response[k] = v
 
-        tmpl = loader.render_to_string('oauth/challenge.html',
+        tmpl = loader.render_to_string(template_name,
             { 'MEDIA_URL': settings.MEDIA_URL })
 
         response.content = tmpl
