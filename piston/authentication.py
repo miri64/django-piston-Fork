@@ -222,7 +222,7 @@ def oauth_user_auth(request,
     else:
         response = HttpResponse('Action not allowed.')
             
-    return response
+        return response
 
 def oauth_access_token(request):
     oauth_server, oauth_request = initialize_server_request(request)
@@ -318,4 +318,4 @@ class OAuthAuthentication(object):
     def validate_token(request, check_timestamp=True, check_nonce=True):
         oauth_server, oauth_request = initialize_server_request(request)
         return oauth_server.verify_request(oauth_request)
-
+       

@@ -150,8 +150,14 @@ class Resource(object):
         if not meth:
             raise Http404
 
-        # Support emitter both through (?P<emitter_format>) and ?format=emitter.
+        # Support emitter through (?P<emitter_format>) and ?format=emitter
+        # and lastly Accept: header processing
         em_format = self.determine_emitter(request, *args, **kwargs)
+        if not em_format:
+            request_has_accept = 'HTTP_ACCEPT' in request.META
+            if request_has_accept and self.strict_accept:
+                return rc.NOT_ACCEPTABLE
+            em_format = self.default_emitter
 
         kwargs.pop('emitter_format', None)
 
@@ -181,13 +187,15 @@ class Resource(object):
         # If we're looking at a response object which contains non-string
         # content, then assume we should use the emitter to format that 
         # content
-        if isinstance(result, HttpResponse) and not result._is_string:
+        if self._use_emitter(result):
             status_code = result.status_code
-            # Note: We can't use result.content here because that method attempts
-            # to convert the content into a string which we don't want. 
-            # when _is_string is False _container is the raw data
+            # Note: We can't use result.content here because that
+            # method attempts to convert the content into a string
+            # which we don't want.  when
+            # _is_string/_base_content_is_iter is False _container is
+            # the raw data
             result = result._container
-     
+
         srl = emitter(result, typemapper, handler, fields, anonymous)
 
         try:
@@ -210,6 +218,16 @@ class Resource(object):
             return resp
         except HttpStatusCode, e:
             return e.response
+
+    @staticmethod
+    def _use_emitter(result):
+        """True iff result is a HttpResponse and contains non-string content."""
+        if not isinstance(result, HttpResponse):
+            return False
+        elif django.VERSION >= (1, 4):
+            return result._base_content_is_iter
+        else:
+            return not result._is_string
 
     @staticmethod
     def cleanup_request(request):
